@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -Wall -g CMakeFiles/main.dir/src/main.cpp.o CMakeFiles/main.dir/src/bot.cpp.o -o main 
