@@ -1,6 +1,5 @@
 #include "../include/board.h"
-
-#define BOT_DEPTH 5 
+#include <random>
 
 // 
 // The bot uses a minimax algorithm to decide its best move
@@ -45,7 +44,7 @@ float staticPositionEvaluate(board gameBoard, int depth) {
 }
 
 // evaluate returns a positive value for a red position and negative for yellow
-float evaluate(board gameBoard, int depth) {
+float evaluate(board gameBoard, float alpha, float beta, int depth) {
 	// bot should try to minimize if playing as yellow
 	bool minimizing = gameBoard.getTurn() % 2 == 1; 
 
@@ -67,50 +66,26 @@ float evaluate(board gameBoard, int depth) {
 
 		boardCopy.dropPiece(i);
 	
-		curMoveEval = evaluate(boardCopy, depth - 1);
+		curMoveEval = evaluate(boardCopy, alpha, beta, depth - 1);
 
-		if (minimizing && curMoveEval < bestMoveEval) {
-			bestMoveEval = curMoveEval;
-		} else if (!minimizing && curMoveEval > bestMoveEval) {
-			bestMoveEval = curMoveEval;
+		if (minimizing) {
+            if (beta <= alpha) {
+                break;
+            }
+
+            bestMoveEval = std::min(curMoveEval, bestMoveEval);
+            beta = std::min(curMoveEval, beta);
+			// bestMoveEval = curMoveEval;
+		} else if (!minimizing) {
+            if (beta <= alpha) {
+                break;
+            }
+
+            bestMoveEval = std::max(curMoveEval, bestMoveEval);
+            alpha = std::max(curMoveEval, alpha);
+			// bestMoveEval = curMoveEval;
 		}
 	}
-
-	// if (minimizing) {
-	// 	for (int i = 1; i <= COLS; i++) {
-	// 		boardCopy = gameBoard;
-
-	// 		column curColumn = boardCopy[i - 1];
-	// 		if (!curColumn.isLegal()) {
-	// 			continue;
-	// 		}
-
-	// 		boardCopy.dropPiece(i);
-	// 	
-	// 		curMoveEval = evaluate(boardCopy, depth - 1);
-
-	// 		if (curMoveEval < bestMoveEval) {
-	// 			bestMoveEval = curMoveEval;
-	// 		}
-	// 	}
-	// } else {
-	// 	for (int i = 1; i <= COLS; i++) {
-	// 		boardCopy = gameBoard;
-
-	// 		column curColumn = boardCopy[i - 1];
-	// 		if (!curColumn.isLegal()) {
-	// 			continue;
-	// 		}
-
-	// 		boardCopy.dropPiece(i);
-	// 	
-	// 		curMoveEval = evaluate(boardCopy, depth - 1);
-
-	// 		if (curMoveEval > bestMoveEval) {
-	// 			bestMoveEval = curMoveEval;
-	// 		}
-	// 	}
-	// }
 
 	return bestMoveEval;
 }
@@ -120,6 +95,11 @@ int getBotChoice(board gameBoard, int depth) {
 	int bestMove = gameBoard.getLegalMoves()[0]; 
 	bool minimizing = gameBoard.getTurn() % 2 == 1;
 	float curEval = 0.0f, maxEval = minimizing ? 1000.0f : -1000.0f;
+    
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    
+    std::uniform_int_distribution<> dis(0, 1);
 
 	for (int i = 1; i <= COLS; i++) {
 		board boardCopy = gameBoard;
@@ -132,7 +112,15 @@ int getBotChoice(board gameBoard, int depth) {
 			continue;
 		}
 
-		curEval = evaluate(boardCopy, depth);
+		curEval = evaluate(boardCopy, -1000, 1000, depth);
+
+        // if two moves have identical evaluations
+        // randomly pick between the two
+        if (curEval == maxEval) {
+            if(dis(gen)) {
+                bestMove = i;
+            } 
+        }
 
 		if (minimizing && curEval < maxEval) {
 			bestMove = i;

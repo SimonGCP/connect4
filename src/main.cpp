@@ -4,8 +4,6 @@
 #include "../include/board.h"
 #include "../include/bot.h"
 
-#define BOT_DEPTH 6 
-
 enum GameMode {
 	VS_PLAYER,
 	VS_BOT,
