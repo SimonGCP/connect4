@@ -7,7 +7,7 @@
 #include <iostream>
 #include <vector>
 
-#define BOT_DEPTH 7 
+#define BOT_DEPTH 8 
 
 #define COLS 7
 #define ROWS 6
@@ -66,8 +66,14 @@ class board {
 		column columns[7];
 		int turn;
 
+		uint64_t redBitboard;
+		uint64_t yellowBitboard;
+		uint8_t heights[COLS] = {0, 7, 14, 21, 28, 35, 42};
+
 		board() {
 			turn = 0;
+			redBitboard = 0;
+			yellowBitboard = 0;
 		}
 
 		int getTurn() {
@@ -79,26 +85,43 @@ class board {
 		}
 
 		void displayBoard() {
-			for (int i = 0; i < ROWS; i++) {
+			// for (int i = 0; i < ROWS; i++) {
+			// 	std::cout << "🟦";
+			// 	for (int j = 0; j < COLS; j++) {
+			// 		switch (columns[j][i]) {
+			// 			case Color::RED:
+			// 				std::cout << "🔴";
+			// 				break;
+			// 			case Color::YELLOW:
+			// 				std::cout << "🟡";
+			// 				break;
+			// 			case Color::EMPTY:
+			// 				std::cout << "⚪";
+			// 				break;
+			// 			default:
+			// 				std::cout << columns[i][j];
+			// 				std::cout << "";
+			// 		}
+			// 	}
+			// 	std::cout << "🟦";
+			// 	std::cout << std::endl;
+			// }
+		
+			for (int i = 5; i >= 0; i--) {
+				uint64_t idx = 1UL << i;
 				std::cout << "🟦";
 				for (int j = 0; j < COLS; j++) {
-					switch (columns[j][i]) {
-						case Color::RED:
-							std::cout << "🔴";
-							break;
-						case Color::YELLOW:
-							std::cout << "🟡";
-							break;
-						case Color::EMPTY:
-							std::cout << "⚪";
-							break;
-						default:
-							std::cout << columns[i][j];
-							std::cout << "";
+					if (redBitboard & idx) {
+						std::cout << "🔴";
+					} else if (yellowBitboard & idx) {
+						std::cout << "🟡";
+					} else {
+						std::cout << "⚪";
 					}
+
+					idx <<= 7;
 				}
-				std::cout << "🟦";
-				std::cout << std::endl;
+				std::cout << "🟦\n";
 			}
 			// next line is broken on nvim, don't touch it :)
 			std::cout << "🟦1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣🟦";
@@ -127,102 +150,40 @@ class board {
 				return false;
 			}
 
-			if(columns[index].addPiece(turn % 2 ? Color::YELLOW : Color::RED)) {
+			int curColor = turn & 1 ? Color::YELLOW : Color::RED;
+
+			uint64_t bit_idx = 1UL << heights[index];
+			if (curColor == Color::RED) {
+				redBitboard |= bit_idx;	
+			} else {
+				yellowBitboard |= bit_idx;
+			}
+			heights[index]++;
+
+			if(columns[index].addPiece(curColor)) {
 				turn++;
 				return true;
 			} else {
 				return false;
 			}
+
+		}
+
+		// thanks to 
+		// https://github.com/denkspuren/BitboardC4/blob/master/BitboardDesign.md
+		bool isWin(uint64_t bitboard) {
+			int directions[4] = {1, 7, 6, 8};
+			uint64_t bb;
+			for(int direction : directions) {
+				bb = bitboard & (bitboard >> direction);
+				if ((bb & (bb >> (2 * direction))) != 0) return true;
+			}
+			return false;
 		}
 
 		GameOverStatus checkGameOver() {
-			int streak = 0;
-			int curColor = Color::EMPTY,  prevColor = Color::EMPTY;
-
-			// check vertical
-			for (auto curColumn : columns) {
-				streak = 0;
-				prevColor = Color::EMPTY;
-				for (int i = 0; i < ROWS; i++) {
-					curColor = curColumn[i];
-
-					if (curColor == prevColor && curColor != Color::EMPTY) {
-						streak++;
-
-						if (streak == 4) {
-							return curColor == Color::RED ?
-								GameOverStatus::RED_WIN :
-								GameOverStatus::YELLOW_WIN;
-						}
-						continue;
-					}
-
-					streak = curColor != Color::EMPTY ? 1 : 0;
-					prevColor = curColor;
-				}
-			}
-
-			// check horizontal
-			for (int i = 0; i < ROWS; i++) {
-				streak = 0;
-				prevColor = Color::EMPTY;
-				for (int j = 0; j < COLS; j++) {
-					curColor = columns[j][i];
-					if (curColor == prevColor && curColor != Color::EMPTY) {
-						streak++;
-
-						if (streak == 4) {
-							return curColor == Color::RED ?
-								GameOverStatus::RED_WIN :
-								GameOverStatus::YELLOW_WIN;
-						}
-						continue;
-					}
-
-					streak = curColor != Color::EMPTY ? 1 : 0;
-					prevColor = curColor;
-				}
-			}
-
-			// check diagonal
-			for (int i = 0; i < COLS; i++) {
-				for (int j = 0; j < ROWS; j++) {
-					if (columns[i][j] != Color::EMPTY) {
-						curColor = columns[i][j];
-						// check up and to left
-						for (int k = 1; k <= 3; k++) {
-							if (i - k < 0 || j - k < 0) {
-								break;
-							}
-							if (columns[i-k][j-k] != curColor) {
-								break;
-							}
-
-							if (k == 3) {
-								return curColor == Color::RED?
-									GameOverStatus::RED_WIN :
-									GameOverStatus::YELLOW_WIN;
-							}
-						}
-
-						// check up and to right
-						for (int k = 1; k <= 3; k++) {
-							if (i + k >= COLS || j - k < 0) {
-								break;
-							}
-							if (columns[i+k][j-k] != curColor) {
-								break;
-							}
-
-							if (k == 3) {
-								return curColor == Color::RED?
-									GameOverStatus::RED_WIN :
-									GameOverStatus::YELLOW_WIN;
-							}
-						}
-					}
-				}
-			}
+			if (isWin(redBitboard)) return GameOverStatus::RED_WIN;
+			if (isWin(yellowBitboard)) return GameOverStatus::YELLOW_WIN;
 
 			if (turn >= COLS * ROWS) {
 				return GameOverStatus::TIE;

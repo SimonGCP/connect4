@@ -1,5 +1,6 @@
 #include "../include/board.h"
 #include <random>
+#include <thread>
 
 // 
 // The bot uses a minimax algorithm to decide its best move
@@ -69,20 +70,20 @@ float evaluate(board gameBoard, float alpha, float beta, int depth) {
 		curMoveEval = evaluate(boardCopy, alpha, beta, depth - 1);
 
 		if (minimizing) {
-            if (beta <= alpha) {
-                break;
-            }
+			if (beta <= alpha) {
+				break;
+			}
 
-            bestMoveEval = std::min(curMoveEval, bestMoveEval);
-            beta = std::min(curMoveEval, beta);
+			bestMoveEval = std::min(curMoveEval, bestMoveEval);
+			beta = std::min(curMoveEval, beta);
 			// bestMoveEval = curMoveEval;
 		} else if (!minimizing) {
-            if (beta <= alpha) {
-                break;
-            }
+			if (beta <= alpha) {
+				break;
+			}
 
-            bestMoveEval = std::max(curMoveEval, bestMoveEval);
-            alpha = std::max(curMoveEval, alpha);
+			bestMoveEval = std::max(curMoveEval, bestMoveEval);
+			alpha = std::max(curMoveEval, alpha);
 			// bestMoveEval = curMoveEval;
 		}
 	}
@@ -96,10 +97,13 @@ int getBotChoice(board gameBoard, int depth) {
 	bool minimizing = gameBoard.getTurn() % 2 == 1;
 	float curEval = 0.0f, maxEval = minimizing ? 1000.0f : -1000.0f;
     
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    
-    std::uniform_int_distribution<> dis(0, 1);
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	
+	std::uniform_int_distribution<> dis(0, 1);
+
+	std::vector<std::thread> threads(COLS);
+	std::vector<float> evals(COLS);
 
 	for (int i = 1; i <= COLS; i++) {
 		board boardCopy = gameBoard;
@@ -108,25 +112,37 @@ int getBotChoice(board gameBoard, int depth) {
 		if (!curColumn.isLegal())
 			continue;
 
-		if (!boardCopy.dropPiece(i)) {
+		if (!boardCopy.dropPiece(i)) 
 			continue;
+
+		threads[i-1] = std::thread([&evals, i, boardCopy, depth]() {
+			evals[i-1] = evaluate(boardCopy, -1000, 1000, depth);
+		});
+	}
+
+
+	for (int i = 0; i < COLS; i++) {
+		if (threads[i].joinable()) {
+			threads[i].join();
+		} else {
+			continue;
+		} 
+
+		curEval = evals[i];
+
+		// if two moves have identical evaluations
+		// randomly pick between the two
+		if (curEval == maxEval) {
+			if(dis(gen)) {
+				bestMove = i+1;
+			} 
 		}
 
-		curEval = evaluate(boardCopy, -1000, 1000, depth);
-
-        // if two moves have identical evaluations
-        // randomly pick between the two
-        if (curEval == maxEval) {
-            if(dis(gen)) {
-                bestMove = i;
-            } 
-        }
-
 		if (minimizing && curEval < maxEval) {
-			bestMove = i;
+			bestMove = i+1;
 			maxEval = curEval;
 		} else if (!minimizing && curEval > maxEval) {
-			bestMove = i;
+			bestMove = i+1;
 			maxEval = curEval;
 		}
 	}
