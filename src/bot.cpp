@@ -1,6 +1,10 @@
 #include "../include/board.h"
+#include "../include/transposition_table.h"
 #include <random>
 #include <thread>
+#include <mutex>
+
+std::mutex tableLock;
 
 // 
 // The bot uses a minimax algorithm to decide its best move
@@ -32,10 +36,11 @@ float staticPositionEvaluate(board gameBoard, int depth) {
 
 	for (int i = 0; i < COLS; i++) {
 		for (int j = 0; j < ROWS; j++) {
-			const int color = gameBoard[i][j];
-			if (color == Color::RED) {
+			const uint64_t idx = (1ULL << (COLS * i)) << j;
+
+			if (gameBoard.redBitboard & idx) {
 				eval += boardPriority[j][i];
-			} else if (color == Color::YELLOW) {
+			} else if (gameBoard.yellowBitboard & idx) {
 				eval -= boardPriority[j][i];
 			}
 		}
@@ -45,19 +50,51 @@ float staticPositionEvaluate(board gameBoard, int depth) {
 }
 
 // evaluate returns a positive value for a red position and negative for yellow
-float evaluate(board gameBoard, float alpha, float beta, int depth) {
+float evaluate(board gameBoard, float alpha, float beta, int depth, t_table *table) {
 	// bot should try to minimize if playing as yellow
 	bool minimizing = gameBoard.getTurn() % 2 == 1; 
+	int type = evaluation_type::UPPER_BOUND;
+	uint64_t bitboards[2] = {gameBoard.redBitboard, gameBoard.yellowBitboard};
 
 	if (depth == 0 || gameBoard.checkGameOver() != GameOverStatus::ONGOING) {
-		return staticPositionEvaluate(gameBoard, depth);
+		const float eval = staticPositionEvaluate(gameBoard, depth);
+
+		tableLock.lock();
+		table->put(bitboards, eval, !minimizing, evaluation_type::EXACT, 0);
+		tableLock.unlock();
+
+		return eval;
+	}
+
+	// lookup position in t-table
+	tableLock.lock();
+	positionInfo *tableRes = table->get(bitboards, !minimizing);
+	tableLock.unlock();
+
+	// if an entry is found in the t-table
+	if (tableRes != NULL && tableRes->depth >= depth) {
+		int retType = tableRes->type;
+		float retEval = tableRes->eval;
+		
+		switch (retType) {
+			case evaluation_type::EXACT:
+				return retEval;
+			case evaluation_type::UPPER_BOUND:
+				if (retEval < alpha)
+					return retEval;
+				break;
+			case evaluation_type::LOWER_BOUND:
+				if (retEval >= beta)
+					return retEval;
+				break;
+		}
 	}
 
 	board boardCopy = gameBoard;
 
 	float curMoveEval = 0.0f, bestMoveEval = minimizing ? 1000.0f : -1000.0f;
 
-	for (int i = 1; i <= COLS; i++) {
+	for (int i : gameBoard.getLegalMoves()) {
 		boardCopy = gameBoard;
 
 		column curColumn = boardCopy[i - 1];
@@ -67,59 +104,58 @@ float evaluate(board gameBoard, float alpha, float beta, int depth) {
 
 		boardCopy.dropPiece(i);
 	
-		curMoveEval = evaluate(boardCopy, alpha, beta, depth - 1);
+		curMoveEval = evaluate(boardCopy, alpha, beta, depth - 1, table);
 
 		if (minimizing) {
-			if (beta <= alpha) {
-				break;
-			}
-
 			bestMoveEval = std::min(curMoveEval, bestMoveEval);
 			beta = std::min(curMoveEval, beta);
-			// bestMoveEval = curMoveEval;
-		} else if (!minimizing) {
+
 			if (beta <= alpha) {
 				break;
 			}
-
+		} else if (!minimizing) {
 			bestMoveEval = std::max(curMoveEval, bestMoveEval);
 			alpha = std::max(curMoveEval, alpha);
-			// bestMoveEval = curMoveEval;
+
+			if (beta <= alpha) {
+				break;
+			}
 		}
 	}
+
+	bitboards[0] = gameBoard.redBitboard;
+	bitboards[1] = gameBoard.yellowBitboard;
+
+	type = evaluation_type::EXACT;
+	if (bestMoveEval > alpha) type = evaluation_type::LOWER_BOUND;
+	if (bestMoveEval < beta) type = evaluation_type::UPPER_BOUND;
+
+	tableLock.lock();
+	table->put(bitboards, bestMoveEval, !minimizing, type, depth);
+	tableLock.unlock();
 
 	return bestMoveEval;
 }
 
 // recursive minimax function that returns bot's column choice
-int getBotChoice(board gameBoard, int depth) {
-	int bestMove = gameBoard.getLegalMoves()[0]; 
+int getBotChoice(board gameBoard, int depth, t_table *table) {
+	std::vector<int> legalMoves = gameBoard.getLegalMoves();
+	int bestMove = legalMoves[0]; 
 	bool minimizing = gameBoard.getTurn() % 2 == 1;
 	float curEval = 0.0f, maxEval = minimizing ? 1000.0f : -1000.0f;
     
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	
-	std::uniform_int_distribution<> dis(0, 1);
-
 	std::vector<std::thread> threads(COLS);
 	std::vector<float> evals(COLS);
 
-	for (int i = 1; i <= COLS; i++) {
+	for (int i = 0; i < COLS; i++) {
 		board boardCopy = gameBoard;
 
-		column curColumn = boardCopy[i - 1];
-		if (!curColumn.isLegal())
-			continue;
+		if (!boardCopy.dropPiece(i+1)) continue;
 
-		if (!boardCopy.dropPiece(i)) 
-			continue;
-
-		threads[i-1] = std::thread([&evals, i, boardCopy, depth]() {
-			evals[i-1] = evaluate(boardCopy, -1000, 1000, depth);
-		});
+		threads[i] = std::thread([&evals, i, boardCopy, depth, table]() {
+			evals[i] = evaluate(boardCopy, -1000, 1000, depth, table);
+		});	
 	}
-
 
 	for (int i = 0; i < COLS; i++) {
 		if (threads[i].joinable()) {
@@ -127,16 +163,8 @@ int getBotChoice(board gameBoard, int depth) {
 		} else {
 			continue;
 		} 
-
+		
 		curEval = evals[i];
-
-		// if two moves have identical evaluations
-		// randomly pick between the two
-		if (curEval == maxEval) {
-			if(dis(gen)) {
-				bestMove = i+1;
-			} 
-		}
 
 		if (minimizing && curEval < maxEval) {
 			bestMove = i+1;

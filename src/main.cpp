@@ -3,6 +3,7 @@
 
 #include "../include/board.h"
 #include "../include/bot.h"
+#include "../include/transposition_table.h"
 
 enum GameMode {
 	VS_PLAYER,
@@ -77,6 +78,7 @@ int getUserChoice() {
 
 void gameLoop(board &gameBoard) {
 	gameBoard.displayBoard();
+	t_table *table = new t_table;
 	while(gameOngoing(gameBoard)) {
 		const char *message = gameBoard.getTurn() % 2 ? "Yellow's turn" : "Red's turn";
 		std::cout << message << std::endl;
@@ -92,7 +94,7 @@ void gameLoop(board &gameBoard) {
 		if (usersTurn) { 
 			rowChoice = getUserChoice();
 		} else {
-			rowChoice = getBotChoice(gameBoard, BOT_DEPTH);	
+			rowChoice = getBotChoice(gameBoard, BOT_DEPTH, table);	
 		}
 
 		if (!gameBoard.dropPiece(rowChoice)) {
@@ -119,6 +121,8 @@ void gameLoop(board &gameBoard) {
 			std::cout << "err";
 			break;
 	}
+
+	delete table;
 }
 
 int main(int argc, char *argv[]) {

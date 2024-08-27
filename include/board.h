@@ -7,7 +7,7 @@
 #include <iostream>
 #include <vector>
 
-#define BOT_DEPTH 8 
+#define BOT_DEPTH 18 
 
 #define COLS 7
 #define ROWS 6
@@ -85,28 +85,6 @@ class board {
 		}
 
 		void displayBoard() {
-			// for (int i = 0; i < ROWS; i++) {
-			// 	std::cout << "🟦";
-			// 	for (int j = 0; j < COLS; j++) {
-			// 		switch (columns[j][i]) {
-			// 			case Color::RED:
-			// 				std::cout << "🔴";
-			// 				break;
-			// 			case Color::YELLOW:
-			// 				std::cout << "🟡";
-			// 				break;
-			// 			case Color::EMPTY:
-			// 				std::cout << "⚪";
-			// 				break;
-			// 			default:
-			// 				std::cout << columns[i][j];
-			// 				std::cout << "";
-			// 		}
-			// 	}
-			// 	std::cout << "🟦";
-			// 	std::cout << std::endl;
-			// }
-		
 			for (int i = 5; i >= 0; i--) {
 				uint64_t idx = 1UL << i;
 				std::cout << "🟦";
@@ -123,18 +101,19 @@ class board {
 				}
 				std::cout << "🟦\n";
 			}
+
 			// next line is broken on nvim, don't touch it :)
 			std::cout << "🟦1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣🟦";
 			std::cout << std::endl;
 		}
 
 		std::vector<int> getLegalMoves() {
+			const uint64_t top = 0b1000000100000010000001000000100000010000001000000UL;
 			std::vector<int> legalMoves;
 
 			for (int i = 0; i < COLS; i++) {
-				if (columns[i].isLegal()) {
-					legalMoves.push_back(i + 1);		
-				}
+				if (!(1L << heights[i] & top))
+					legalMoves.push_back(i);
 			}
 
 			return legalMoves;
@@ -144,23 +123,22 @@ class board {
 			if (col < 1 || col > 7) {
 				return false;
 			}
+			col--;
 
-			int index = col - 1;
-			if (!columns[index].isLegal()) {
-				return false;
-			}
+			// check if legal
+			if (heights[col] >= col * 7 + ROWS) return false;
 
 			int curColor = turn & 1 ? Color::YELLOW : Color::RED;
 
-			uint64_t bit_idx = 1UL << heights[index];
+			uint64_t idx = 1UL << heights[col];
 			if (curColor == Color::RED) {
-				redBitboard |= bit_idx;	
+				redBitboard |= idx;	
 			} else {
-				yellowBitboard |= bit_idx;
+				yellowBitboard |= idx;
 			}
-			heights[index]++;
+			heights[col]++;
 
-			if(columns[index].addPiece(curColor)) {
+			if(columns[col].addPiece(curColor)) {
 				turn++;
 				return true;
 			} else {
