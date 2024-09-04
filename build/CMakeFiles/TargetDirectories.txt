@@ -1,3 +1,0 @@
-/home/simon/Projects/cpp_stuff/connect4/build/CMakeFiles/main.exe.dir
-/home/simon/Projects/cpp_stuff/connect4/build/CMakeFiles/edit_cache.dir
-/home/simon/Projects/cpp_stuff/connect4/build/CMakeFiles/rebuild_cache.dir
