@@ -46,7 +46,7 @@ class t_table {
 		if (player > 1) return 0;
 
 		uint64_t zobHash = 0;
-		uint64_t curBitboard = bitboards[player];
+		uint64_t curBitboard = bitboards[player] & bitboards[!player];
 
 		for (int i = 0; i < ROWS*COLS; i++) {
 			if ((curBitboard >> i) & 1ULL) {

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <vector>
 
-#define BOT_DEPTH 18 
+#define BOT_DEPTH 9 
 
 #define COLS 7
 #define ROWS 6
